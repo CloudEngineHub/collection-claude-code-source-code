@@ -12,6 +12,12 @@ This repository contains two subprojects that study Claude Code (Anthropic’s o
 
 ---
 
+## 🔥🔥🔥 News
+
+- 9:50 AM · Mar 31, 2026: [Claude code memory analysis](https://x.com/henryl_ai/status/2039022608310808965)
+- 3:02 AM · Mar 31, 2026: [Community Reaction to the Claude Code Source Exposure](https://x.com/hank_aibtc/status/2038919948370616330)
+- 1:23 AM · Mar 31, 2026: [A Viral Post on the Claude Code Source Leak](https://x.com/Fried_rice/status/2038894956459290963?s=20)
+
 ## 1. claude-code-source-code
 
 A decompiled/unpacked source archive of Claude Code v2.1.88, reconstructed from the npm package `@anthropic-ai/claude-code@2.1.88`, containing approximately 163,318 lines of TypeScript code.
