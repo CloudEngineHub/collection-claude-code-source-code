@@ -20,7 +20,7 @@
 - 2:57 AM · Mar 31, 2026: [The code behind Claude Code](https://x.com/mal_shaik/status/2038918662489510273)
 - 1:23 AM · Mar 31, 2026: [A Viral Post on the Claude Code Source Leak](https://x.com/Fried_rice/status/2038894956459290963?s=20)
 
-This repository contains two subprojects that study Claude Code (Anthropic’s official CLI tool) from two different angles:
+This repository contains subprojects that study Claude Code (Anthropic’s official CLI tool: source claude code) from two different angles:
 
 | Subproject                                            | Language   | Nature                              | File Count  |
 | ----------------------------------------------------- | ---------- | ----------------------------------- | ----------- |
