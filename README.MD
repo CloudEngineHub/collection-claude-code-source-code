@@ -5,6 +5,7 @@
 
 ## 🔥🔥🔥 News
 - 17:13 PM · Mar 31, 2026: [Architecture Analysis of Claude Code (In Chinese)](https://mp.weixin.qq.com/s?__biz=MzI0ODk2NDIyMQ==&mid=2247502519&idx=1&sn=1072dd7a822a78709bc7cc3bf0e1dcc2&chksm=e8de6705e2bacc854211663aa02903738560f9e858eb6ce72b94c32fdbf67917badfab2d6536&mpshare=1&scene=1&srcid=0401KpkqfaXFBReRof6AwJ74&sharer_shareinfo=30fa54f1602d1d8bb1a65e7008074e08&sharer_shareinfo_first=30fa54f1602d1d8bb1a65e7008074e08#rd)
+ - 16:43 PM · Mar 31, 2026: [An Overview of Claude Code Features (In Chinese)](https://mp.weixin.qq.com/s?__biz=MzAxODI5ODMwOA==&mid=2666572944&idx=1&sn=c54e34711e67a2e961acb341f51d2190&chksm=81ca164af949bdfe90a616c8ef8d7e729116a4a12a480cd9d012f42f5b8d7ecd6d05e284db09&mpshare=1&scene=1&srcid=04017JkKs9qrCh4AHcfZq7qL&sharer_shareinfo=95eb268167dd1b3d98271b8b26e7553e&sharer_shareinfo_first=95eb268167dd1b3d98271b8b26e7553e#rd)
 - 15:00 PM · Mar 31, 2026: [Hacker News discussion about Claude Code Leak](https://news.ycombinator.com/item?id=47586778)
 - 9:50 AM · Mar 31, 2026: [Claude code memory analysis](https://x.com/henryl_ai/status/2039022608310808965)
 - 9:48 AM · Mar 31, 2026: [Claude Code's source code appears to have leaked: here's what we know](https://venturebeat.com/technology/claude-codes-source-code-appears-to-have-leaked-heres-what-we-know)
