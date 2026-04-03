@@ -2,9 +2,13 @@
 import os
 import re
 import glob as _glob
+import difflib
 import subprocess
 from pathlib import Path
 from typing import Callable, Optional
+
+from tool_registry import ToolDef, register_tool
+from tool_registry import execute_tool as _registry_execute
 
 # ── Tool JSON schemas (sent to Claude API) ─────────────────────────────────
 
@@ -142,6 +146,24 @@ def _is_safe_bash(cmd: str) -> bool:
     return any(c.startswith(p) for p in _SAFE_PREFIXES)
 
 
+# ── Diff helpers ──────────────────────────────────────────────────────────
+
+def generate_unified_diff(old, new, filename, context_lines=3):
+    old_lines = old.splitlines(keepends=True)
+    new_lines = new.splitlines(keepends=True)
+    diff = difflib.unified_diff(old_lines, new_lines,
+        fromfile=f"a/{filename}", tofile=f"b/{filename}", n=context_lines)
+    return "".join(diff)
+
+def maybe_truncate_diff(diff_text, max_lines=80):
+    lines = diff_text.splitlines()
+    if len(lines) <= max_lines:
+        return diff_text
+    shown = lines[:max_lines]
+    remaining = len(lines) - max_lines
+    return "\n".join(shown) + f"\n\n[... {remaining} more lines ...]"
+
+
 # ── Tool implementations ───────────────────────────────────────────────────
 
 def _read(file_path: str, limit: int = None, offset: int = None) -> str:
@@ -164,10 +186,19 @@ def _read(file_path: str, limit: int = None, offset: int = None) -> str:
 def _write(file_path: str, content: str) -> str:
     p = Path(file_path)
     try:
+        is_new = not p.exists()
+        old_content = "" if is_new else p.read_text(errors="replace")
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content)
-        lc = content.count("\n") + (1 if content and not content.endswith("\n") else 0)
-        return f"Wrote {lc} lines to {file_path}"
+        if is_new:
+            lc = content.count("\n") + (1 if content and not content.endswith("\n") else 0)
+            return f"Created {file_path} ({lc} lines)"
+        filename = p.name
+        diff = generate_unified_diff(old_content, content, filename)
+        if not diff:
+            return f"No changes in {file_path}"
+        truncated = maybe_truncate_diff(diff)
+        return f"File updated — {file_path}:\n\n{truncated}"
     except Exception as e:
         return f"Error: {e}"
 
@@ -184,10 +215,13 @@ def _edit(file_path: str, old_string: str, new_string: str, replace_all: bool = 
         if count > 1 and not replace_all:
             return (f"Error: old_string appears {count} times. "
                     "Provide more context to make it unique, or use replace_all=true.")
+        old_content = content
         new_content = content.replace(old_string, new_string) if replace_all else \
                       content.replace(old_string, new_string, 1)
         p.write_text(new_content)
-        return f"Replaced {'all ' + str(count) if replace_all else '1'} occurrence(s) in {file_path}"
+        filename = p.name
+        diff = generate_unified_diff(old_content, new_content, filename)
+        return f"Changes applied to {filename}:\n\n{diff}"
     except Exception as e:
         return f"Error: {e}"
 
@@ -299,15 +333,22 @@ def _websearch(query: str) -> str:
         return f"Error: {e}"
 
 
-# ── Dispatcher ─────────────────────────────────────────────────────────────
+# ── Dispatcher (backward-compatible wrapper) ──────────────────────────────
 
 def execute_tool(
     name: str,
     inputs: dict,
     permission_mode: str = "auto",
     ask_permission: Optional[Callable[[str], bool]] = None,
+    config: dict = None,
 ) -> str:
-    """Dispatch tool execution; ask permission for write/destructive ops."""
+    """Dispatch tool execution; ask permission for write/destructive ops.
+
+    Permission checking is done here, then delegation goes to the registry.
+    The config dict is forwarded to tool functions so they can access
+    runtime context like _depth, _system_prompt, model, etc.
+    """
+    cfg = config or {}
 
     def _check(desc: str) -> bool:
         """Return True if action is allowed."""
@@ -317,43 +358,110 @@ def execute_tool(
             return ask_permission(desc)
         return True  # headless: allow everything
 
-    if name == "Read":
-        return _read(inputs["file_path"], inputs.get("limit"), inputs.get("offset"))
-
-    elif name == "Write":
+    # --- permission gate ---
+    if name == "Write":
         if not _check(f"Write to {inputs['file_path']}"):
             return "Denied: user rejected write operation"
-        return _write(inputs["file_path"], inputs["content"])
-
     elif name == "Edit":
         if not _check(f"Edit {inputs['file_path']}"):
             return "Denied: user rejected edit operation"
-        return _edit(inputs["file_path"], inputs["old_string"],
-                     inputs["new_string"], inputs.get("replace_all", False))
-
     elif name == "Bash":
         cmd = inputs["command"]
         if permission_mode != "accept-all" and not _is_safe_bash(cmd):
             if not _check(f"Bash: {cmd}"):
                 return "Denied: user rejected bash command"
-        return _bash(cmd, inputs.get("timeout", 30))
 
-    elif name == "Glob":
-        return _glob(inputs["pattern"], inputs.get("path"))
+    return _registry_execute(name, inputs, cfg)
 
-    elif name == "Grep":
-        return _grep(
-            inputs["pattern"], inputs.get("path"), inputs.get("glob"),
-            inputs.get("output_mode", "files_with_matches"),
-            inputs.get("case_insensitive", False),
-            inputs.get("context", 0),
-        )
 
-    elif name == "WebFetch":
-        return _webfetch(inputs["url"], inputs.get("prompt"))
+# ── Register built-in tools with the plugin registry ─────────────────────
 
-    elif name == "WebSearch":
-        return _websearch(inputs["query"])
+def _register_builtins() -> None:
+    """Register all 8 built-in tools into the central registry."""
+    _tool_defs = [
+        ToolDef(
+            name="Read",
+            schema=TOOL_SCHEMAS[0],
+            func=lambda p, c: _read(**p),
+            read_only=True,
+            concurrent_safe=True,
+        ),
+        ToolDef(
+            name="Write",
+            schema=TOOL_SCHEMAS[1],
+            func=lambda p, c: _write(**p),
+            read_only=False,
+            concurrent_safe=False,
+        ),
+        ToolDef(
+            name="Edit",
+            schema=TOOL_SCHEMAS[2],
+            func=lambda p, c: _edit(**p),
+            read_only=False,
+            concurrent_safe=False,
+        ),
+        ToolDef(
+            name="Bash",
+            schema=TOOL_SCHEMAS[3],
+            func=lambda p, c: _bash(p["command"], p.get("timeout", 30)),
+            read_only=False,
+            concurrent_safe=False,
+        ),
+        ToolDef(
+            name="Glob",
+            schema=TOOL_SCHEMAS[4],
+            func=lambda p, c: _glob(p["pattern"], p.get("path")),
+            read_only=True,
+            concurrent_safe=True,
+        ),
+        ToolDef(
+            name="Grep",
+            schema=TOOL_SCHEMAS[5],
+            func=lambda p, c: _grep(
+                p["pattern"], p.get("path"), p.get("glob"),
+                p.get("output_mode", "files_with_matches"),
+                p.get("case_insensitive", False),
+                p.get("context", 0),
+            ),
+            read_only=True,
+            concurrent_safe=True,
+        ),
+        ToolDef(
+            name="WebFetch",
+            schema=TOOL_SCHEMAS[6],
+            func=lambda p, c: _webfetch(p["url"], p.get("prompt")),
+            read_only=True,
+            concurrent_safe=True,
+        ),
+        ToolDef(
+            name="WebSearch",
+            schema=TOOL_SCHEMAS[7],
+            func=lambda p, c: _websearch(p["query"]),
+            read_only=True,
+            concurrent_safe=True,
+        ),
+    ]
+    for td in _tool_defs:
+        register_tool(td)
 
-    else:
-        return f"Unknown tool: {name}"
+
+_register_builtins()
+
+
+# ── Memory tools (MemorySave, MemoryDelete, MemorySearch, MemoryList) ────────
+# Defined in memory/tools.py; importing registers them automatically.
+import memory.tools as _memory_tools  # noqa: F401
+
+
+
+# ── Multi-agent tools (Agent, SendMessage, CheckAgentResult, ListAgentTasks, ListAgentTypes) ──
+# Defined in multi_agent/tools.py; importing registers them automatically.
+import multi_agent.tools as _multiagent_tools  # noqa: F401
+
+# Expose get_agent_manager at module level for backward compatibility
+from multi_agent.tools import get_agent_manager as _get_agent_manager  # noqa: F401
+
+
+# ── Skill tools (Skill, SkillList) ────────────────────────────────────────
+# Defined in skill/tools.py; importing registers them automatically.
+import skill.tools as _skill_tools  # noqa: F401

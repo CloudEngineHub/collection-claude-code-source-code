@@ -4,6 +4,7 @@
 > Source archive of Claude Code and a clean-room Python rewrite research repository
 
 ## 🔥🔥🔥 News (Pacific Time)
+- 12:20 PM · Apr 02, 2026: [Nano Claude Code v3.0: Multi-agent packages, memory package, skill package with built-in skills, argument substitution, fork/inline execution, AI memory search, git worktree isolation, agent type definitions (~5000 Lines)](https://github.com/SafeRL-Lab/nano-claude-code)
 - 7:40 AM · Apr 02, 2026: [Nano Claude Code v2.0: A Minimal Python Reimplementation (~3400 Lines), support open and closed source models, skill and memory](https://github.com/SafeRL-Lab/nano-claude-code)
 - 8:36 AM · Apr 01, 2026: [Nano Claude Code v1.0: A Minimal Python Reimplementation (~1300 Lines)](https://github.com/SafeRL-Lab/nano-claude-code)
 - 0:20 AM · Apr 01, 2026: [Analysis of Claude Code source code (Video: In Chinese)](https://www.youtube.com/watch?v=xsg6_Gvr2J0&t=10s)
@@ -27,7 +28,8 @@
 
 ## Content
 
-  * [1. claude-code-source-code](#1-claude-code-source-code)
+  * [1. original-source-code](#1-original-source-code)
+  * [2. claude-code-source-code](#2-claude-code-source-code)
     + [Overall Architecture](#overall-architecture)
     + [Core Execution Flow](#core-execution-flow)
     + [Tech Stack](#tech-stack)
@@ -37,29 +39,57 @@
       - [Permission System](#permission-system)
       - [Context Management](#context-management)
       - [Analysis Documents (`docs/`)](#analysis-documents---docs---)
-  * [2. claw-code](#2-claw-code)
+  * [3. claw-code](#3-claw-code)
     + [Overall Architecture](#overall-architecture-1)
     + [Core Classes](#core-classes)
     + [CLI Commands](#cli-commands)
     + [Design Features](#design-features)
-  * [Comparison of the Projects](#comparison-of-the-two-projects)
+  * [4. nano-claude-code](#4-nano-claude-code)
+    + [Features](#features)
+    + [Supported Models](#supported-models)
+    + [Project Structure](#project-structure)
+  * [Comparison of the Projects](#comparison-of-the-projects)
   * [License and Disclaimer](#license-and-disclaimer)
 
 
 
 ---
-This repository contains subprojects that study Claude Code (Anthropic’s official CLI tool: source claude code) from two different angles:
+This repository contains subprojects that study Claude Code (Anthropic’s official CLI tool) from multiple angles:
 
-| Subproject                                            | Language   | Nature                              | File Count  |
-| ----------------------------------------------------- | ---------- | ----------------------------------- | ----------- |
-| [claude-code-source-code](#1-claude-code-source-code) | TypeScript | Decompiled source archive (v2.1.88) | 1,884 files |
-| [claw-code](#2-claw-code)                             | Python     | Clean-room architectural rewrite    | 66 files    |
+| Subproject                                              | Language   | Nature                                    | File Count  |
+| ------------------------------------------------------- | ---------- | ----------------------------------------- | ----------- |
+| [original-source-code](#1-original-source-code)         | TypeScript | Raw leaked source archive                 | 1,884 files |
+| [claude-code-source-code](#2-claude-code-source-code)   | TypeScript | Decompiled source archive (v2.1.88) + docs| 1,940 files |
+| [claw-code](#3-claw-code)                               | Python     | Clean-room architectural rewrite          | 109 files   |
+| [nano-claude-code](#4-nano-claude-code)                 | Python     | Minimal multi-provider reimplementation   | ~30 files   |
 
 ---
 
 
 
-## 1. claude-code-source-code
+## 1. original-source-code
+
+The raw leaked TypeScript source of Claude Code, preserved as-is from the original exposure on March 31, 2026. Contains 1,884 TypeScript/TSX files (packaged as `src.zip`) spanning the full `src/` directory tree — the same files that triggered community discussion and downstream research.
+
+```text
+original-source-code/
+├── src/                  # Full TypeScript source tree (1,884 .ts/.tsx files)
+│   ├── main.tsx          # CLI entry point
+│   ├── query.ts          # Core agent loop
+│   ├── commands.ts       # Slash command definitions
+│   ├── tools.ts          # Tool registration
+│   └── ...               # All other source directories (same layout as claude-code-source-code/src)
+├── src.zip               # Compressed archive (~9.5 MB)
+└── readme.md
+```
+
+This directory serves as the unmodified reference snapshot. No annotations, docs, or build tooling have been added — use `claude-code-source-code` for the researched and annotated version.
+
+---
+
+
+
+## 2. claude-code-source-code
 
 A decompiled/unpacked source archive of Claude Code v2.1.88, reconstructed from the npm package `@anthropic-ai/claude-code@2.1.88`, containing approximately 163,318 lines of TypeScript code.
 
@@ -186,7 +216,7 @@ yield SDKMessage           # Stream results back to the consumer
 
 ---
 
-## 2. claw-code
+## 3. claw-code
 
 A clean-room Python rewrite of Claude Code (without including original source copies), focused on architectural mirroring and research. Built by [@instructkr](https://github.com/instructkr) (Sigrid Jin), and became one of the fastest GitHub repositories in the world to reach 30K stars.
 
@@ -292,26 +322,143 @@ tool-pool            # Tool pool assembly view
 * **Snapshot-driven**: command/tool metadata is loaded through JSON snapshots without requiring full logical implementations
 * **Clean-room rewrite**: does not include original TypeScript code; independently implemented
 * **Parity audit**: built-in `parity_audit.py` tracks gaps from the original implementation
-* **Lightweight architecture**: core framework implemented in 66 files, suitable for learning and extension
+* **Lightweight architecture**: core framework implemented in 109 files, suitable for learning and extension
 
 ---
 
-## Comparison of the Two Projects
+## 4. nano-claude-code
 
-| Dimension               | claude-code-source-code                   | claw-code                                        |
-| ----------------------- | ----------------------------------------- | ------------------------------------------------ |
-| Language                | TypeScript                                | Python                                           |
-| Code Size               | ~163,000 lines                            | ~5,000 lines                                     |
-| Nature                  | Decompiled source archive                 | Clean-room architectural rewrite                 |
-| Functional Completeness | Complete (100%)                           | Architectural framework (~20%)                   |
-| Core Loop               | `query.ts` (785KB)                        | `QueryEnginePort` (~200 lines)                   |
-| Tool System             | 40+ fully implemented tools               | Snapshot metadata + execution framework          |
-| Command System          | ~87 fully implemented commands            | Snapshot metadata + execution framework          |
-| Main Use Case           | Deep study of full implementation details | Architectural understanding and porting research |
+A minimal, fully-runnable Python reimplementation of Claude Code (~5,000 lines). Unlike `claw-code` (which focuses on architectural mapping), nano-claude-code is a real coding assistant that can be used immediately. It supports 20+ closed-source models and local open-source models, and has grown from a ~900-line prototype to a feature-rich v3.0 with multi-agent orchestration, persistent memory, and a skill system.
+
+### Features
+
+| Feature | Details |
+| ------- | ------- |
+| Multi-provider | Anthropic · OpenAI · Gemini · Kimi · Qwen · Zhipu · DeepSeek · Ollama · LM Studio · Custom endpoint |
+| Interactive REPL | readline history, Tab-complete slash commands |
+| Agent loop | Streaming API + automatic tool-use loop |
+| 18 built-in tools | Read · Write · Edit · Bash · Glob · Grep · WebFetch · WebSearch · MemorySave · MemoryDelete · MemorySearch · MemoryList · Agent · SendMessage · CheckAgentResult · ListAgentTasks · ListAgentTypes · Skill · SkillList |
+| Diff view | Git-style red/green diff display for Edit and Write |
+| Context compression | Auto-compact long conversations to stay within model limits |
+| Persistent memory | Dual-scope memory (user + project) with 4 types, AI search, staleness warnings |
+| Multi-agent | Spawn typed sub-agents (coder/reviewer/researcher/…), git worktree isolation, background mode |
+| Skills | Built-in `/commit` · `/review` + custom markdown skills with argument substitution and fork/inline execution |
+| Plugin tools | Register custom tools via `tool_registry.py` |
+| Permission system | `auto` / `accept-all` / `manual` modes |
+| 17 slash commands | `/model` · `/config` · `/save` · `/cost` · `/memory` · `/skills` · `/agents` · … |
+| Context injection | Auto-loads `CLAUDE.md`, git status, cwd, persistent memory |
+| Session persistence | Save / load conversations to `~/.nano_claude/sessions/` |
+| Extended Thinking | Toggle on/off (Claude models only) |
+| Cost tracking | Token usage + estimated USD cost |
+| Non-interactive mode | `--print` flag for scripting / CI |
+
+### Supported Models
+
+**Closed-source (API):** Claude (Anthropic), GPT / o-series (OpenAI), Gemini (Google), Kimi (Moonshot AI), Qwen (Alibaba DashScope), GLM (Zhipu), DeepSeek
+
+**Open-source (local via Ollama):** llama3.3/3.2, qwen2.5-coder, deepseek-r1, phi4, mistral, mixtral, gemma3, codellama, and any model on `ollama list`
+
+**Self-hosted:** vLLM, LM Studio, or any OpenAI-compatible endpoint via `CUSTOM_BASE_URL`
+
+### Project Structure
+
+```text
+nano-claude-code/
+├── nano_claude.py       # Entry point: REPL + slash commands + rendering   (~748 lines)
+├── agent.py             # Agent loop: message format + tool dispatch        (~174 lines)
+├── providers.py         # Multi-provider adapters + message conversion      (~507 lines)
+├── tools.py             # Tool dispatch + auto-registration of all packages (~467 lines)
+├── tool_registry.py     # Central tool registry + plugin entry point        (~98 lines)
+├── context.py           # System prompt builder: CLAUDE.md + git + memory  (~135 lines)
+├── compaction.py        # Context compression (auto-compact)                (~196 lines)
+├── config.py            # Config load/save/defaults                         (~72 lines)
+├── memory.py            # Backward-compat shim → memory/
+├── skills.py            # Backward-compat shim → skill/
+├── subagent.py          # Backward-compat shim → multi_agent/
+│
+├── memory/              # Persistent memory package
+│   ├── store.py         # Save/load/delete/search memory entries
+│   ├── scan.py          # Index scanning, age/freshness helpers
+│   ├── context.py       # System-prompt injection + AI-ranked search
+│   ├── types.py         # MEMORY_TYPES definitions
+│   └── tools.py         # MemorySave · MemoryDelete · MemorySearch · MemoryList
+│
+├── skill/               # Skill system package
+│   ├── loader.py        # SkillDef, file parsing, argument substitution
+│   ├── builtin.py       # Built-in skills: /commit, /review
+│   ├── executor.py      # Inline + fork execution modes
+│   └── tools.py         # Skill · SkillList
+│
+├── multi_agent/         # Multi-agent orchestration package
+│   ├── subagent.py      # AgentDefinition, SubAgentTask, SubAgentManager, worktree helpers
+│   └── tools.py         # Agent · SendMessage · CheckAgentResult · ListAgentTasks · ListAgentTypes
+│
+├── tests/               # 101 tests (monkeypatched, no real ~/.nano_claude touched)
+├── docs/                # Docs and demo assets
+└── requirements.txt
+```
+
+**Quick start:**
+
+```bash
+pip install anthropic openai httpx rich
+export ANTHROPIC_API_KEY=sk-ant-...
+python nano_claude.py
+
+# Switch provider at startup
+python nano_claude.py --model gpt-4o
+python nano_claude.py --model ollama/qwen2.5-coder
+
+# Non-interactive / CI
+python nano_claude.py --print "Write a Python fibonacci function" --accept-all
+```
+
+**Memory** — persistent across sessions, dual-scope (user `~/.nano_claude/memory/` and project `.nano_claude/memory/`):
+
+```
+/memory               # list all memories with staleness info
+MemorySave(name="...", type="feedback", content="...", scope="user")
+MemorySearch(query="...", use_ai=True)
+```
+
+**Skills** — reusable prompt templates, invoke from REPL:
+
+```
+/commit               # built-in: review staged changes and create a git commit
+/review 123           # built-in: review PR #123
+/skills               # list all available skills with triggers and hints
+```
+
+**Multi-agent** — spawn typed sub-agents with optional git worktree isolation:
+
+```
+Agent(prompt="...", subagent_type="coder", isolation="worktree", wait=False)
+SendMessage(agent_name="my-agent", message="...")
+/agents               # show all active and finished sub-agent tasks
+```
+
+---
+
+## Comparison of the Projects
+
+| Dimension               | original-source-code           | claude-code-source-code                   | claw-code                                        | nano-claude-code                              |
+| ----------------------- | ------------------------------ | ----------------------------------------- | ------------------------------------------------ | --------------------------------------------- |
+| Language                | TypeScript                     | TypeScript                                | Python                                           | Python                                        |
+| Code Size               | ~163,000 lines                 | ~163,000 lines + docs                     | ~5,000 lines                                     | ~5,000 lines                                  |
+| Nature                  | Raw leaked source archive      | Decompiled source archive + analysis      | Clean-room architectural rewrite                 | Minimal functional reimplementation           |
+| Functional Completeness | Complete (100%)                | Complete (100%)                           | Architectural framework (~20%)                   | Core loop + memory + multi-agent + skills     |
+| Core Loop               | `query.ts` (785KB)             | `query.ts` (785KB)                        | `QueryEnginePort` (~200 lines)                   | `agent.py` (~174 lines)                       |
+| Tool System             | 40+ fully implemented tools    | 40+ fully implemented tools               | Snapshot metadata + execution framework          | 18 fully implemented tools + plugin registry  |
+| Memory System           | Yes (7-layer, complex)         | Yes (7-layer, complex)                    | No                                               | Yes (dual-scope, 4 types, AI search)          |
+| Multi-agent             | Yes (full coordinator)         | Yes (full coordinator)                    | No                                               | Yes (typed agents, worktree isolation)        |
+| Skills                  | Yes (~87 commands)             | Yes (~87 commands)                        | Snapshot metadata only                           | Yes (built-in + custom markdown skills)       |
+| Multi-provider          | No (Anthropic only)            | No (Anthropic only)                       | No                                               | Yes (10+ providers)                           |
+| Immediately Runnable    | No                             | No                                        | Limited (CLI metadata only)                      | Yes                                           |
+| Main Use Case           | Raw reference snapshot         | Deep study of full implementation details | Architectural understanding and porting research | Lightweight full-featured coding assistant    |
 
 ---
 
 ## License and Disclaimer
 
-This repository is for academic research and educational purposes only. Both subprojects are built from publicly accessible information. Users are responsible for complying with applicable laws, regulations, and service terms.
+This repository is for academic research and educational purposes only. All subprojects are built from publicly accessible information. Users are responsible for complying with applicable laws, regulations, and service terms.
 

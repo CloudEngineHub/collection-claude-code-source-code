@@ -26,6 +26,9 @@ Slash commands in REPL:
   /thinking   Toggle extended thinking
   /permissions [mode]  Set permission mode
   /cwd [path] Show or change working directory
+  /memory [query]   Show/search persistent memories
+  /skills           List available skills
+  /agents           Show sub-agent tasks
   /exit /quit Exit
 """
 from __future__ import annotations
@@ -33,13 +36,16 @@ from __future__ import annotations
 import os
 import sys
 import json
-import readline
+try:
+    import readline
+except ImportError:
+    readline = None  # Windows compatibility
 import atexit
 import argparse
 import textwrap
 from pathlib import Path
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union
 
 # ── Optional rich for markdown rendering ──────────────────────────────────
 try:
@@ -76,6 +82,25 @@ def info(msg: str):   print(clr(msg, "cyan"))
 def ok(msg: str):     print(clr(msg, "green"))
 def warn(msg: str):   print(clr(f"Warning: {msg}", "yellow"))
 def err(msg: str):    print(clr(f"Error: {msg}", "red"), file=sys.stderr)
+
+
+def render_diff(text: str):
+    """Print diff text with ANSI colors: red for removals, green for additions."""
+    for line in text.splitlines():
+        if line.startswith("+++") or line.startswith("---"):
+            print(C["bold"] + line + C["reset"])
+        elif line.startswith("+"):
+            print(C["green"] + line + C["reset"])
+        elif line.startswith("-"):
+            print(C["red"] + line + C["reset"])
+        elif line.startswith("@@"):
+            print(C["cyan"] + line + C["reset"])
+        else:
+            print(line)
+
+def _has_diff(text: str) -> bool:
+    """Check if text contains a unified diff."""
+    return "--- a/" in text and "+++ b/" in text
 
 
 # ── Conversation rendering ─────────────────────────────────────────────────
@@ -118,6 +143,12 @@ def print_tool_end(name: str, result: str, verbose: bool):
     summary = f"→ {lines} lines ({size} chars)"
     if not result.startswith("Error") and not result.startswith("Denied"):
         print(clr(f"  ✓ {summary}", "dim", "green"), flush=True)
+        # Render diff for Edit/Write results
+        if name in ("Edit", "Write") and _has_diff(result):
+            parts = result.split("\n\n", 1)
+            if len(parts) == 2:
+                print(clr(f"  {parts[0]}", "dim"))
+                render_diff(parts[1])
     else:
         print(clr(f"  ✗ {result[:120]}", "dim", "red"), flush=True)
     if verbose and not result.startswith("Denied"):
@@ -131,8 +162,26 @@ def _tool_desc(name: str, inputs: dict) -> str:
     if name == "Bash":   return f"Bash({inputs.get('command','')[:80]})"
     if name == "Glob":   return f"Glob({inputs.get('pattern','')})"
     if name == "Grep":   return f"Grep({inputs.get('pattern','')})"
-    if name == "WebFetch":  return f"WebFetch({inputs.get('url','')[:60]})"
-    if name == "WebSearch": return f"WebSearch({inputs.get('query','')})"
+    if name == "WebFetch":    return f"WebFetch({inputs.get('url','')[:60]})"
+    if name == "WebSearch":   return f"WebSearch({inputs.get('query','')})"
+    if name == "Agent":
+        atype = inputs.get("subagent_type", "")
+        aname = inputs.get("name", "")
+        iso   = inputs.get("isolation", "")
+        bg    = not inputs.get("wait", True)
+        parts = []
+        if atype:  parts.append(atype)
+        if aname:  parts.append(f"name={aname}")
+        if iso:    parts.append(f"isolation={iso}")
+        if bg:     parts.append("background")
+        suffix = f"({', '.join(parts)})" if parts else ""
+        prompt_short = inputs.get("prompt", "")[:60]
+        return f"Agent{suffix}: {prompt_short}"
+    if name == "SendMessage":
+        return f"SendMessage(to={inputs.get('to','')}: {inputs.get('message','')[:50]})"
+    if name == "CheckAgentResult": return f"CheckAgentResult({inputs.get('task_id','')})"
+    if name == "ListAgentTasks":   return "ListAgentTasks()"
+    if name == "ListAgentTypes":   return "ListAgentTypes()"
     return f"{name}({list(inputs.values())[:1]})"
 
 
@@ -351,6 +400,101 @@ def cmd_exit(_args: str, _state, _config) -> bool:
     ok("Goodbye!")
     sys.exit(0)
 
+def cmd_memory(args: str, _state, _config) -> bool:
+    from memory import search_memory, load_index
+    from memory.scan import scan_all_memories, format_memory_manifest, memory_freshness_text
+
+    if args.strip():
+        results = search_memory(args.strip())
+        if not results:
+            info(f"No memories matching '{args.strip()}'")
+            return True
+        info(f"  {len(results)} result(s) for '{args.strip()}':")
+        for m in results:
+            info(f"  [{m.type:9s}|{m.scope:7s}] {m.name}: {m.description}")
+            info(f"    {m.content[:120]}{'...' if len(m.content) > 120 else ''}")
+        return True
+
+    # Show manifest with age/freshness
+    headers = scan_all_memories()
+    if not headers:
+        info("No memories stored. The model saves memories via MemorySave.")
+        return True
+    info(f"  {len(headers)} memory/memories (newest first):")
+    for h in headers:
+        fresh_warn = "  ⚠ stale" if memory_freshness_text(h.mtime_s) else ""
+        tag = f"[{h.type or '?':9s}|{h.scope:7s}]"
+        info(f"  {tag} {h.filename}{fresh_warn}")
+        if h.description:
+            info(f"    {h.description}")
+    return True
+
+def cmd_agents(_args: str, _state, _config) -> bool:
+    try:
+        from multi_agent.tools import get_agent_manager
+        mgr = get_agent_manager()
+        tasks = mgr.list_tasks()
+        if not tasks:
+            info("No sub-agent tasks.")
+            return True
+        info(f"  {len(tasks)} sub-agent task(s):")
+        for t in tasks:
+            preview = t.prompt[:50] + ("..." if len(t.prompt) > 50 else "")
+            wt_info = f"  branch:{t.worktree_branch}" if t.worktree_branch else ""
+            info(f"  {t.id} [{t.status:9s}] name={t.name}{wt_info}  {preview}")
+    except Exception:
+        info("Sub-agent system not initialized.")
+    return True
+
+
+def _print_background_notifications():
+    """Print notifications for newly completed background agent tasks.
+
+    Called before each user prompt so the user sees results without polling.
+    """
+    try:
+        from multi_agent.tools import get_agent_manager
+        mgr = get_agent_manager()
+    except Exception:
+        return
+
+    notified_key = "_notified"
+    if not hasattr(_print_background_notifications, "_seen"):
+        _print_background_notifications._seen = set()
+
+    for task in mgr.list_tasks():
+        if task.id in _print_background_notifications._seen:
+            continue
+        if task.status in ("completed", "failed", "cancelled"):
+            _print_background_notifications._seen.add(task.id)
+            icon = "✓" if task.status == "completed" else "✗"
+            color = "green" if task.status == "completed" else "red"
+            branch_info = f" [branch: {task.worktree_branch}]" if task.worktree_branch else ""
+            print(clr(
+                f"\n  {icon} Background agent '{task.name}' {task.status}{branch_info}",
+                color, "bold"
+            ))
+            if task.result:
+                preview = task.result[:200] + ("..." if len(task.result) > 200 else "")
+                print(clr(f"    {preview}", "dim"))
+            print()
+
+def cmd_skills(_args: str, _state, _config) -> bool:
+    from skill import load_skills
+    skills = load_skills()
+    if not skills:
+        info("No skills found.")
+        return True
+    info(f"Available skills ({len(skills)}):")
+    for s in skills:
+        triggers = ", ".join(s.triggers)
+        source_label = f"[{s.source}]" if s.source != "builtin" else ""
+        hint = f"  args: {s.argument_hint}" if s.argument_hint else ""
+        print(f"  {clr(s.name, 'cyan'):24s} {s.description}  {clr(triggers, 'dim')}{hint} {clr(source_label, 'yellow')}")
+        if s.when_to_use:
+            print(f"    {clr(s.when_to_use[:80], 'dim')}")
+    return True
+
 COMMANDS = {
     "help":        cmd_help,
     "clear":       cmd_clear,
@@ -365,13 +509,16 @@ COMMANDS = {
     "thinking":    cmd_thinking,
     "permissions": cmd_permissions,
     "cwd":         cmd_cwd,
+    "skills":      cmd_skills,
+    "memory":      cmd_memory,
+    "agents":      cmd_agents,
     "exit":        cmd_exit,
     "quit":        cmd_exit,
 }
 
 
-def handle_slash(line: str, state, config) -> bool:
-    """Handle /command [args]. Returns True if handled."""
+def handle_slash(line: str, state, config) -> Union[bool, tuple]:
+    """Handle /command [args]. Returns True if handled, tuple (skill, args) for skill match."""
     if not line.startswith("/"):
         return False
     parts = line[1:].split(None, 1)
@@ -383,6 +530,15 @@ def handle_slash(line: str, state, config) -> bool:
     if handler:
         handler(args, state, config)
         return True
+
+    # Fall through to skill lookup
+    from skill import find_skill
+    skill = find_skill(line)
+    if skill:
+        cmd_parts = line.strip().split(maxsplit=1)
+        skill_args = cmd_parts[1] if len(cmd_parts) > 1 else ""
+        return (skill, skill_args)
+
     err(f"Unknown command: /{cmd}  (type /help for commands)")
     return True
 
@@ -390,6 +546,8 @@ def handle_slash(line: str, state, config) -> bool:
 # ── Input history setup ────────────────────────────────────────────────────
 
 def setup_readline(history_file: Path):
+    if readline is None:
+        return
     try:
         readline.read_history_file(str(history_file))
     except FileNotFoundError:
@@ -487,6 +645,8 @@ def repl(config: dict, initial_prompt: str = None):
         return
 
     while True:
+        # Show notifications for background agents that finished
+        _print_background_notifications()
         try:
             cwd_short = Path.cwd().name
             prompt = clr(f"\n[{cwd_short}] ", "dim") + clr("❯ ", "cyan", "bold")
@@ -498,7 +658,19 @@ def repl(config: dict, initial_prompt: str = None):
 
         if not user_input:
             continue
-        if handle_slash(user_input, state, config):
+
+        result = handle_slash(user_input, state, config)
+        if isinstance(result, tuple):
+            skill, skill_args = result
+            info(f"Running skill: {skill.name}" + (f" [{skill.context}]" if skill.context == "fork" else ""))
+            try:
+                from skill import substitute_arguments
+                rendered = substitute_arguments(skill.prompt, skill_args, skill.arguments)
+                run_query(f"[Skill: {skill.name}]\n\n{rendered}")
+            except KeyboardInterrupt:
+                print(clr("\n  (interrupted)", "yellow"))
+            continue
+        if result:
             continue
 
         try:
